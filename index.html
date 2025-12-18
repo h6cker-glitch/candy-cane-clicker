@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Candy Cane Clicker</title>
+<style>
+html,body{margin:0;padding:0;height:100%;font-family:'Segoe UI',Arial;background:#0b1020;color:#fff}
+#game{display:flex;height:100vh}
+#left{width:40%;background:linear-gradient(#b30024,#3b000a);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px}
+#right{width:60%;padding:10px;overflow-y:auto}
+#cane{font-size:180px;cursor:pointer;user-select:none;transition:transform .1s}
+#cane:active{transform:scale(.9)}
+#count{font-size:26px}
+#cps{opacity:.8}
+.tabbar{display:flex;gap:6px;justify-content:center;margin-bottom:8px}
+.tabbar button{padding:6px 10px;border-radius:8px;border:none;cursor:pointer}
+.panel{display:none}
+.panel.active{display:block}
+.box{background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.2);border-radius:10px;padding:10px;margin:8px 0}
+.disabled{opacity:.4;pointer-events:none}
+#nameOverlay{position:fixed;inset:0;background:rgba(0,0,0,.9);display:flex;align-items:center;justify-content:center;z-index:50}
+#admin{position:fixed;top:10px;right:10px;background:rgba(0,0,0,.85);padding:10px;border-radius:10px;z-index:60}
+#boss{position:fixed;inset:0;background:rgba(0,0,0,.9);display:none;align-items:center;justify-content:center;z-index:70}
+#volume{width:100%}
+@media(max-width:900px){#game{flex-direction:column}#left,#right{width:100%}}
+</style>
+</head>
+<body>
+
+<div id="nameOverlay">
+ <div class="box" style="text-align:center">
+  <b>Enter Your Name</b><br><br>
+  <input id="playerName" placeholder="name" /><br><br>
+  <button id="startBtn">Start</button>
+ </div>
+</div>
+
+<div id="game">
+ <div id="left">
+  <div id="cane">🍭</div>
+  <div id="count">0 Candy Canes</div>
+  <div id="cps">0 / second</div>
+ </div>
+ <div id="right">
+  <h1 style="text-align:center">Candy Cane Clicker</h1>
+  <div class="tabbar">
+   <button data-tab="buildings">Buildings</button>
+   <button data-tab="upgrades">Upgrades</button>
+   <button data-tab="achievements">Achievements</button>
+   <button data-tab="cosmetics">Cosmetics</button>
+  </div>
+  <div id="buildings" class="panel active"></div>
+  <div id="upgrades" class="panel"></div>
+  <div id="achievements" class="panel"></div>
+  <div id="cosmetics" class="panel"></div>
+ </div>
+</div>
+
+<div id="boss"><div class="box" id="bossBox"></div></div>
+
+<script>
+document.addEventListener('DOMContentLoaded',()=>{
+'use strict';
+
+// ===== STATE =====
+let candy=0,cps=0,clickPower=1;
+let coins=0;
+let playerName='';
+let admin=false;
+let elfCursorUnlocked=false;
+
+// ===== ELEMENTS =====
+const overlay=document.getElementById('nameOverlay');
+const startBtn=document.getElementById('startBtn');
+const nameInput=document.getElementById('playerName');
+const cane=document.getElementById('cane');
+const countEl=document.getElementById('count');
+const cpsEl=document.getElementById('cps');
+
+// ===== AUDIO =====
+const clickSound=new Audio('https://cdn.pixabay.com/audio/2022/03/15/audio_1eaf57c23c.mp3');
+const music=new Audio('https://cdn.pixabay.com/audio/2023/03/27/audio_45c9f2b4f0.mp3');
+music.loop=true;music.volume=0.4;let musicStarted=false;
+function startMusic(){if(!musicStarted){music.play().catch(()=>{});musicStarted=true;}}
+
+// ===== DATA =====
+const buildings=[
+ {name:'Elf',base:10,cps:0.1,owned:0},
+ {name:'Bakery',base:100,cps:1,owned:0},
+ {name:'Workshop',base:500,cps:5,owned:0},
+ {name:'Factory',base:2000,cps:20,owned:0},
+ {name:'North Pole',base:10000,cps:100,owned:0},
+ {name:'Magic Sleigh',base:50000,cps:500,owned:0},
+ {name:'Time Snowglobe',base:250000,cps:2500,owned:0},
+ {name:'Candy Dimension',base:1000000,cps:12000,owned:0}
+];
+
+const upgrades=[
+ {name:'Sharper Canes',cost:50,done:false,apply(){clickPower*=2;}},
+ {name:'Peppermint Grip',cost:200,done:false,apply(){clickPower*=2;}},
+ {name:'Holiday Cheer',cost:500,done:false,apply(){cps*=2;}},
+ {name:'Elf Training',cost:2000,done:false,apply(){cps*=2;}},
+ {name:'North Pole Efficiency',cost:10000,done:false,apply(){cps*=2;}}
+];
+
+const achievements=[
+ {name:'First Cane',done:false,check(){return candy>=1;}},
+ {name:'Sweet 100',done:false,check(){return candy>=100;}},
+ {name:'Candy Thousand',done:false,check(){return candy>=1000;}},
+ {name:'Elf Army',done:false,check(){return buildings[0].owned>=10;}}
+];
+
+// ===== HELPERS =====
+function price(b){return Math.floor(b.base*Math.pow(1.15,b.owned));}
+function render(){
+ countEl.textContent=Math.floor(candy)+' Candy Canes';
+ cpsEl.textContent=cps.toFixed(1)+' / second';
+
+ const bDiv=document.getElementById('buildings');bDiv.innerHTML='';
+ buildings.forEach(b=>{
+  const d=document.createElement('div');
+  d.className='box'+(candy<price(b)?' disabled':'');
+  d.innerHTML=`<b>${b.name}</b><br>Owned: ${b.owned}<br>Cost: ${price(b)}`;
+  d.onclick=()=>{if(candy>=price(b)){candy-=price(b);b.owned++;cps+=b.cps;render();}};
+  bDiv.appendChild(d);
+ });
+
+ const uDiv=document.getElementById('upgrades');uDiv.innerHTML='';
+ upgrades.forEach(u=>{if(!u.done){const d=document.createElement('div');d.className='box'+(candy<u.cost?' disabled':'');d.textContent=`${u.name} (${u.cost})`;d.onclick=()=>{if(candy>=u.cost){candy-=u.cost;u.done=true;u.apply();render();}};uDiv.appendChild(d);}});
+
+ const aDiv=document.getElementById('achievements');aDiv.innerHTML='';
+ achievements.forEach(a=>{if(!a.done&&a.check())a.done=true;const d=document.createElement('div');d.className='box';d.textContent=a.name+(a.done?' ✓':'');aDiv.appendChild(d);});
+
+ const cDiv=document.getElementById('cosmetics');
+ cDiv.innerHTML=`<div class='box'>
+ Coins: ${coins}<br>
+ <button onclick="document.body.style.background='#124'">Holiday BG</button><br>
+ <button onclick="document.body.style.background='#201'">Classic Dark</button><br>
+ ${elfCursorUnlocked?"<button onclick=\"document.body.style.cursor='crosshair'\">Elf Cursor</button>":'<i>Elf cursor locked</i>'}
+ </div>`;
+}
+
+// ===== START =====
+startBtn.addEventListener('click',()=>{
+ playerName=nameInput.value.trim();
+ overlay.style.display='none';
+ startMusic();
+ if(playerName.toLowerCase()==='santa') enableAdmin();
+ if(playerName==='elf titan22') spawnBoss();
+ render();
+});
+
+// ===== CLICK =====
+cane.addEventListener('click',()=>{
+ startMusic();
+ clickSound.currentTime=0;clickSound.play();
+ candy+=clickPower;coins++;
+ render();
+});
+
+// ===== ADMIN =====
+function enableAdmin(){if(admin)return;admin=true;const d=document.createElement('div');d.id='admin';d.innerHTML="<b>ADMIN</b><br><input id='cmd' placeholder='addcandy 100'/><br><button id='run'>Run</button>";document.body.appendChild(d);document.getElementById('run').onclick=()=>{const p=document.getElementById('cmd').value.split(' ');if(p[0]==='addcandy')candy+=Number(p[1]||0);render();};}
+
+// ===== BOSS =====
+let bossHp=0;
+function spawnBoss(){bossHp=100;document.getElementById('boss').style.display='flex';bossBox.innerHTML=`<b>ELF TITAN</b><br>HP: <span id='bhp'>${bossHp}</span><br><button id='atk'>Attack</button>`;document.getElementById('atk').onclick=()=>{bossHp-=clickPower;document.getElementById('bhp').textContent=bossHp;if(bossHp<=0){elfCursorUnlocked=true;bossBox.innerHTML='ELF TITAN DEFEATED!<br>Elf Cursor Unlocked<br><button id="close">Close</button>';document.getElementById('close').onclick=()=>{document.getElementById('boss').style.display='none';render();};}}}
+
+// ===== TABS =====
+document.querySelectorAll('[data-tab]').forEach(btn=>{btn.addEventListener('click',()=>{document.querySelectorAll('.panel').forEach(p=>p.classList.remove('active'));document.getElementById(btn.dataset.tab).classList.add('active');});});
+
+setInterval(()=>{candy+=cps/10;render();},100);
+render();
+});
+</script>
+</body>
+</html>
